@@ -96,3 +96,9 @@ f() {
 f
 printenv.py L1
 # stdout-json: "local1\nNone\n"
+
+### Export a variable before defining it
+export U
+U=u
+printenv.py U
+# stdout: u

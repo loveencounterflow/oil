@@ -214,6 +214,24 @@ class Mem(object):
       # Assuming LeftVar for now.
       self.top[lhs.name] = flags, value
 
+  def SetExportFlag(self, name):
+    """
+    First look for local, then global
+    """
+    found = False
+    for i in range(len(self.var_stack) - 1, -1, -1):
+      scope = self.var_stack[i]
+      if name in scope:
+        # Don't need to use flags
+        _, value = scope[name]
+        scope[name] = 1, value
+        found = True
+        break
+
+    if not found:
+      # You can export an undefined variable!
+      scope[name] = 1, runtime.Undef()
+
   def SetSimpleVar(self, name, value):
     """Set a simple variable (not an array)."""
     self.top[name] = 0, value
@@ -490,6 +508,21 @@ class Executor(object):
     self.mem.SetGlobalString(ast.LeftVar('PWD'), dest_dir)
     return 0
 
+  def _Export(self, argv):
+    for arg in argv:
+      parts = arg.split('=', 1)
+      if len(parts) == 1:
+        name = parts[0]
+      else:
+        name, val = parts
+        # TODO: Set the global flag
+        self.mem.SetGlobalString(ast.LeftVar(name), val)
+
+      # May create an undefined variable
+      self.mem.SetExportFlag(name)
+
+    return 0
+
   def RunBuiltin(self, builtin_id, argv):
     restore_fd_state = True
 
@@ -524,6 +557,9 @@ class Executor(object):
         code = 1  # Runtime Error
       # TODO: Should this be turned into our own SystemExit exception?
       sys.exit(code)
+
+    elif builtin_id == EBuiltin.EXPORT:
+      status = self._Export(argv)
 
     elif builtin_id in (EBuiltin.SOURCE, EBuiltin.DOT):
       status = self._Source(argv)
@@ -620,6 +656,7 @@ class Executor(object):
       if argv is None:
         err = self.ev.Error()
         raise AssertionError("Error evaluating words: %s" % err)
+      # TODO: Gather exported variables from self.mem
       more_env = self._EvalEnv(node.more_env)
       if more_env is None:
         # TODO: proper error
@@ -785,6 +822,7 @@ class Executor(object):
       if argv is None:
         self.error_stack.extend(self.ev.Error())
         raise _FatalError()
+      # TODO: Gather exported variables from self.mem
       more_env = self._EvalEnv(node.more_env)
       if more_env is None:
         print(self.error_stack)
