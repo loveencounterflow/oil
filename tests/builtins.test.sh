@@ -80,3 +80,19 @@ echo $GLOBAL
 printenv.py GLOBAL
 # stdout-json: "X\nX\n\nNone\n"
 
+### Export existing global variables
+G1=g1
+G2=g2
+export G1 G2
+printenv.py G1 G2
+# stdout-json: "g1\ng2\n"
+
+### Export existing local variable
+f() {
+  local L1=local1
+  export L1
+  printenv.py L1
+}
+f
+printenv.py L1
+# stdout-json: "local1\nNone\n"
