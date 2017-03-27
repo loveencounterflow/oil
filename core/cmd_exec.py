@@ -119,6 +119,10 @@ class Mem(object):
     self.SetGlobalString('IFS', ' \t\n')
     self.SetGlobalString('PWD', os.getcwd())
 
+  #
+  # Stack
+  #
+
   def Push(self, argv):
     self.var_stack.append({})
     self.argv_stack.append(argv)
@@ -135,6 +139,17 @@ class Mem(object):
     """For FOO=bar BAR=baz command."""
     self.var_stack.pop()
 
+  def GetTraceback(self, token):
+    """For runtime and parse time errors."""
+    # TODO: When you Push(), add a function pointer.  And then walk
+    # self.argv_stack here.
+    # We also need a token number.
+    pass
+
+  #
+  # Argv
+  #
+
   def GetArgv0(self):
     """For $0."""
     return self.argv0
@@ -148,6 +163,38 @@ class Mem(object):
     #print('ARGV', argv)
     # from set -- 1 2 3
     self.argv_stack[-1] = argv
+
+  #
+  # Helper
+  #
+
+  def _SetInScope(self, scope, pairs):
+    for lhs, val in pairs:
+      #log('SETTING %s -> %s', lhs, value)
+      assert val.tag in (value_e.Str, value_e.StrArray)
+
+      name = lhs.name
+      if name in scope:
+        # Preserve cell flags.  For example, could be Undef and exported!
+        scope[name].val = val
+      else:
+        scope[name] = runtime.cell(val, False, False)
+
+  #
+  # Globals
+  #
+
+  def GetGlobal(self, name):
+    """Helper for completion."""
+    g = self.var_stack[0]  # global scope
+    if name in g:
+      return g[name].val
+
+    return runtime.Undef()
+
+  def SetGlobals(self, pairs):
+    """For completion."""
+    self._SetInScope(self.var_stack[0], pairs)
 
   def SetGlobalArray(self, name, a):
     """Helper for completion."""
@@ -163,13 +210,9 @@ class Mem(object):
     pairs = [(ast.LeftVar(name), val)]
     self.SetGlobals(pairs)
 
-  def GetGlobal(self, name):
-    """Helper for completion."""
-    g = self.var_stack[0]  # global scope
-    if name in g:
-      return g[name].val
-
-    return runtime.Undef()
+  #
+  # Locals
+  #
 
   def Get(self, name):
     # TODO: Don't implement dynamic scope
@@ -186,22 +229,6 @@ class Mem(object):
       return runtime.Str(v)
 
     return runtime.Undef()
-
-  def _SetInScope(self, scope, pairs):
-    for lhs, val in pairs:
-      #log('SETTING %s -> %s', lhs, value)
-      assert val.tag in (value_e.Str, value_e.StrArray)
-
-      name = lhs.name
-      if name in scope:
-        # Preserve cell flags.  For example, could be Undef and exported!
-        scope[name].val = val
-      else:
-        scope[name] = runtime.cell(val, False, False)
-
-  def SetGlobals(self, pairs):
-    """For completion."""
-    self._SetInScope(self.var_stack[0], pairs)
 
   def SetLocals(self, pairs):
     # - Never change types?  yeah I think that's a good idea, at least for oil
@@ -220,18 +247,25 @@ class Mem(object):
     pairs = [(ast.LeftVar(name), val)]
     self.SetLocals(pairs)
 
-  def SetExportFlag(self, name):
+  def Unset(self, name):
+    # For unset -v (variable)
+    # unset -f is different.
+    raise NotImplementedError
+
+  #
+  # Export
+  #
+
+  def SetExportFlag(self, name, b):
     """
     First look for local, then global
     """
-    # Or maybe create a cell = (value v, bool export, bool readonly)
-
     found = False
     for i in range(len(self.var_stack) - 1, -1, -1):
       scope = self.var_stack[i]
       if name in scope:
         cell = scope[name]
-        cell.exported = True
+        cell.exported = b
         found = True
         break
 
@@ -249,10 +283,13 @@ class Mem(object):
           exported[name] = cell.val.s
     return exported
 
-  def GetTraceback(self, token):
-    # TODO: When you Push(), add a function pointer.  And then walk
-    # self.argv_stack here.
-    # We also need a token number.
+  #
+  # Readonly
+  #
+
+  def SetReadonlyFlag(self, name, b):
+    # Or should this get a flag name?
+    # readonly needs to be respected with 'set'.
     pass
 
 
@@ -528,7 +565,7 @@ class Executor(object):
         self.mem.SetGlobalString(name, val)
 
       # May create an undefined variable
-      self.mem.SetExportFlag(name)
+      self.mem.SetExportFlag(name, True)
 
     return 0
 
