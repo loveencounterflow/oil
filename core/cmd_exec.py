@@ -147,14 +147,14 @@ class Mem(object):
     assert isinstance(a, list)
     val = runtime.StrArray(a)
     pairs = [(name, val)]
-    self.SetGlobal(pairs, 0)
+    self.SetGlobal(pairs)
 
   def SetGlobalString(self, name, s):
     """Helper for completion."""
     assert isinstance(s, str)
     val = runtime.Str(s)
     pairs = [(name, val)]
-    self.SetGlobal(pairs, 0)
+    self.SetGlobal(pairs)
 
   def GetGlobal(self, name):
     """Helper for completion."""
@@ -181,8 +181,10 @@ class Mem(object):
 
     return runtime.Undef()
 
-  def SetGlobal(self, pairs, flags):
+  def SetGlobal(self, pairs):
     """For completion."""
+    flags = 0
+
     g = self.var_stack[0]  # global scope
     for lhs, value in pairs:
       #log('SETTING %s -> %s', lhs, value)
@@ -191,7 +193,7 @@ class Mem(object):
       # Assuming LeftVar for now.
       g[lhs.name] = flags, value
 
-  def SetLocal(self, pairs, flags):
+  def SetLocal(self, pairs):
     # TODO: respect flags
     # TRACE: hm maybe.  It's for debugging, but seems exotic.
 
@@ -209,6 +211,7 @@ class Mem(object):
     # This helps with stuff like IFS.  It starts off as a string, and assigning
     # it to a list is en error.  I guess you will have to turn this no for
     # bash?
+    flags = 0
     for lhs, value in pairs:
       assert value.tag in (value_e.Str, value_e.StrArray)
       # Assuming LeftVar for now.
@@ -218,6 +221,8 @@ class Mem(object):
     """
     First look for local, then global
     """
+    # Or maybe create a cell = (value v, bool export, bool readonly)
+
     found = False
     for i in range(len(self.var_stack) - 1, -1, -1):
       scope = self.var_stack[i]
@@ -231,6 +236,18 @@ class Mem(object):
     if not found:
       # You can export an undefined variable!
       scope[name] = 1, runtime.Undef()
+
+  def GetExported(self):
+    # TODO: Instead of searching every local and global variable on every
+    # invocation, I think it makes sense to maintain a stack of lists/sets.
+    #
+    # - export: add to the set.  but you have to know if it's local or global
+    #
+    # SetExportFlag should check if the name is resolved locally.  If not, then
+    # resolve it globally.
+    pass
+    #
+    #self.export_stack = []
 
   def SetSimpleVar(self, name, value):
     """Set a simple variable (not an array)."""
@@ -369,7 +386,7 @@ class Executor(object):
     # TODO: split line and do that logic
     val = runtime.Str(line.strip())
     pairs = [(ast.LeftVar(names[0]), val)]
-    self.mem.SetLocal(pairs, 0)  # read always uses local variables?
+    self.mem.SetLocal(pairs)  # read always uses local variables?
     return 0
 
   def _Echo(self, argv):
@@ -900,11 +917,10 @@ class Executor(object):
           raise _FatalError()
         pairs.append((pair.lhs, val))
 
-      flags = 0  # TODO: Calculate from keyword/flags
       if node.keyword == Id.Assign_Local:
-        self.mem.SetLocal(pairs, flags)
+        self.mem.SetLocal(pairs)
       else:  # could be readonly/export/etc.
-        self.mem.SetGlobal(pairs, flags)
+        self.mem.SetGlobal(pairs)
 
       # TODO: This should be eval of RHS, unlike bash!
       status = 0

@@ -55,7 +55,7 @@ def InitEvaluator():
   val1 = runtime.Str('xxx')
   val2 = runtime.Str('yyy')
   pairs = [(ast.LeftVar('x'), val1), (ast.LeftVar('y'), val2)]
-  mem.SetLocal(pairs, 0)
+  mem.SetLocal(pairs)
 
   exec_opts = cmd_exec.ExecOpts()
   # Don't need side effects for most things
@@ -172,6 +172,8 @@ class RedirectTest(unittest.TestCase):
 
     fd_state.PopAndRestore()
 
+    fd_state.PushFrame()
+
     sys.stdout.write('after restoring stdout\n')
     sys.stdout.flush()  # flush required
 
@@ -194,10 +196,6 @@ class RedirectTest(unittest.TestCase):
     p = Process(
         ExternalThunk(['ls', '/error', '.']), fd_state=fd_state,
         redirects=[r1, r2])
-
-    print(p.Run())
-
-    return
 
     # Bad File Descriptor
     ok = fd_state.SaveAndDup(5, 1)  # 1>&5
