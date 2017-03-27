@@ -120,20 +120,20 @@ class Mem(object):
     self.SetGlobalString('PWD', os.getcwd())
 
   def Push(self, argv):
-    self.top = {}
-    self.var_stack.append(self.top)
+    self.var_stack.append({})
     self.argv_stack.append(argv)
 
   def Pop(self):
-    self.top = self.var_stack.pop()
+    self.var_stack.pop()
     self.argv_stack.pop()
 
   def PushTemp(self):
-    self.top = {}
-    self.var_stack.append(self.top)
+    """For FOO=bar BAR=baz command."""
+    self.var_stack.append({})
 
   def PopTemp(self):
-    self.top = self.var_stack.pop()
+    """For FOO=bar BAR=baz command."""
+    self.var_stack.pop()
 
   def GetArgv0(self):
     """For $0."""
@@ -166,7 +166,6 @@ class Mem(object):
   def GetGlobal(self, name):
     """Helper for completion."""
     g = self.var_stack[0]  # global scope
-    log('!!GetGlobal %s', name)
     if name in g:
       return g[name].val
 
@@ -177,6 +176,7 @@ class Mem(object):
     for i in range(len(self.var_stack) - 1, -1, -1):
       scope = self.var_stack[i]
       if name in scope:
+        #log('Get %s -> %s in scope %d', name, scope[name].val, i)
         # Don't need to use flags
         return scope[name].val
 
@@ -213,7 +213,7 @@ class Mem(object):
 
     # TODO: Shells have dynamic scope for setting variables.  This is really
     # bad.
-    self._SetInScope(self.top, pairs)
+    self._SetInScope(self.var_stack[-1], pairs)
 
   def SetLocal(self, name, val):
     """Set a single local.""" 
@@ -769,6 +769,7 @@ class Executor(object):
       name = env_pair.name
       rhs = env_pair.val
 
+      # Could pass extra bindings like out_env here?  But PushTemp should work?
       ok, val = self.ev.EvalWordToString(rhs)
       if not ok:
         raise AssertionError
@@ -977,7 +978,9 @@ class Executor(object):
         # object.
       status = 0  # in case we don't loop
       for x in iter_list:
+        #log('> ForEach setting %r', x)
         self.mem.SetLocal(iter_name, runtime.Str(x))
+        #log('<')
 
         try:
           status = self._Execute(node.body)  # last one wins
