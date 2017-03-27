@@ -116,8 +116,8 @@ class Mem(object):
     # Default value; user may unset it.
     # $ echo -n "$IFS" | python -c 'import sys;print repr(sys.stdin.read())'
     # ' \t\n'
-    self.SetGlobalString(ast.LeftVar('IFS'), ' \t\n')
-    self.SetGlobalString(ast.LeftVar('PWD'), os.getcwd())
+    self.SetGlobalString('IFS', ' \t\n')
+    self.SetGlobalString('PWD', os.getcwd())
 
   def Push(self, argv):
     self.top = {}
@@ -146,14 +146,14 @@ class Mem(object):
     """Helper for completion."""
     assert isinstance(a, list)
     val = runtime.StrArray(a)
-    pairs = [(name, val)]
+    pairs = [(ast.LeftVar(name), val)]
     self.SetGlobals(pairs)
 
   def SetGlobalString(self, name, s):
     """Helper for completion."""
     assert isinstance(s, str)
     val = runtime.Str(s)
-    pairs = [(name, val)]
+    pairs = [(ast.LeftVar(name), val)]
     self.SetGlobals(pairs)
 
   def GetGlobal(self, name):
@@ -515,9 +515,9 @@ class Executor(object):
         raise AssertionError
 
     # Save OLDPWD.
-    self.mem.SetGlobalString(ast.LeftVar('OLDPWD'), os.getcwd())
+    self.mem.SetGlobalString('OLDPWD', os.getcwd())
     os.chdir(dest_dir)
-    self.mem.SetGlobalString(ast.LeftVar('PWD'), dest_dir)
+    self.mem.SetGlobalString('PWD', dest_dir)
     return 0
 
   def _Export(self, argv):
@@ -528,7 +528,7 @@ class Executor(object):
       else:
         name, val = parts
         # TODO: Set the global flag
-        self.mem.SetGlobalString(ast.LeftVar(name), val)
+        self.mem.SetGlobalString(name, val)
 
       # May create an undefined variable
       self.mem.SetExportFlag(name)
