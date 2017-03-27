@@ -667,9 +667,6 @@ class Executor(object):
         raise AssertionError("Error evaluating words: %s" % err)
       more_env = self.mem.GetExported()
       self._EvalEnv(node.more_env, more_env)
-      if more_env is None:
-        # TODO: proper error
-        raise AssertionError()
       thunk = self._GetThunkForSimpleCommand(argv, more_env)
 
     elif node.tag == command_e.ControlFlow:
@@ -767,7 +764,7 @@ class Executor(object):
     """
     # NOTE: Env evaluation is done in new scope so it doesn't persist.  It also
     # pushes argv.  Don't need that?
-    #self.mem.PushTemp()  
+    self.mem.PushTemp()  
     for env_pair in node_env:
       name = env_pair.name
       rhs = env_pair.val
@@ -782,7 +779,7 @@ class Executor(object):
       # TODO: Need to pop bindings for simple commands.  Need a stack.
 
       out_env[name] = val.s
-    #self.mem.PopTemp()
+    self.mem.PopTemp()
 
   def _RunPipeline(self, node):
     # TODO: Also check for "echo" and "read".  Turn them into HereDocRedirect()
@@ -830,10 +827,6 @@ class Executor(object):
         raise _FatalError()
       more_env = self.mem.GetExported()
       self._EvalEnv(node.more_env, more_env)
-      if more_env is None:
-        print(self.error_stack)
-        # TODO: throw exception
-        raise AssertionError()
       thunk = self._GetThunkForSimpleCommand(argv, more_env)
 
       # Don't waste a process if we'd launch one anyway.
