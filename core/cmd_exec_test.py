@@ -157,7 +157,7 @@ class RedirectTest(unittest.TestCase):
     in_str = sys.stdin.readline()
     print(repr(in_str))
 
-    fd_state.RestoreAll()
+    fd_state.PopAndRestore()
 
   def testFilenameRedirect(self):
     print('BEFORE', os.listdir('/dev/fd'))
@@ -170,7 +170,7 @@ class RedirectTest(unittest.TestCase):
     #os.write(sys.stdout.fileno(), 'write stdout to stderr\n')
     sys.stdout.flush()  # flush required
 
-    fd_state.RestoreAll()
+    fd_state.PopAndRestore()
 
     sys.stdout.write('after restoring stdout\n')
     sys.stdout.flush()  # flush required
@@ -186,7 +186,7 @@ class RedirectTest(unittest.TestCase):
     sys.stderr.write('stderr to file\n')
     sys.stderr.flush()  # flush required
 
-    fd_state.RestoreAll()
+    fd_state.PopAndRestore()
 
     r1 = FilenameRedirect(Id.Redir_Great, 1, '_tmp/ls-out.txt')
     r2 = FilenameRedirect(Id.Redir_Great, 2, '_tmp/ls-err.txt')
@@ -205,7 +205,7 @@ class RedirectTest(unittest.TestCase):
     if ok:
       sys.stdout.write('write stdout to stderr\n')
       sys.stdout.flush()  # flush required
-      fd_state.RestoreAll()
+      fd_state.PopAndRestore()
     else:
       print('SaveAndDup FAILED')
 
