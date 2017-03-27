@@ -55,7 +55,7 @@ def InitEvaluator():
   val1 = runtime.Str('xxx')
   val2 = runtime.Str('yyy')
   pairs = [(ast.LeftVar('x'), val1), (ast.LeftVar('y'), val2)]
-  mem.SetLocal(pairs)
+  mem.SetLocals(pairs)
 
   exec_opts = cmd_exec.ExecOpts()
   # Don't need side effects for most things

@@ -104,7 +104,7 @@ class Mem(object):
   """
 
   def __init__(self, argv0, argv):
-    self.top = {}  # string -> (flags, runtime.value)
+    self.top = {}  # string -> runtime.cell
     self.var_stack = [self.top]
     self.argv0 = argv0
     self.argv_stack = [argv]
@@ -147,23 +147,23 @@ class Mem(object):
     assert isinstance(a, list)
     val = runtime.StrArray(a)
     pairs = [(name, val)]
-    self.SetGlobal(pairs)
+    self.SetGlobals(pairs)
 
   def SetGlobalString(self, name, s):
     """Helper for completion."""
     assert isinstance(s, str)
     val = runtime.Str(s)
     pairs = [(name, val)]
-    self.SetGlobal(pairs)
+    self.SetGlobals(pairs)
 
   def GetGlobal(self, name):
     """Helper for completion."""
     g = self.var_stack[0]  # global scope
-    #print('!!GetGlobal', self.var_stack)
+    log('!!GetGlobal %s', name)
     if name in g:
-      _, value = g[name]
-      return True, value
-    return False, None
+      return g[name].val
+
+    return runtime.Undef()
 
   def Get(self, name):
     # TODO: Don't implement dynamic scope
@@ -171,8 +171,7 @@ class Mem(object):
       scope = self.var_stack[i]
       if name in scope:
         # Don't need to use flags
-        _, value = scope[name]
-        return value
+        return scope[name].val
 
     # Fall back on environment
     v = os.getenv(name)
@@ -181,20 +180,17 @@ class Mem(object):
 
     return runtime.Undef()
 
-  def SetGlobal(self, pairs):
+  def SetGlobals(self, pairs):
     """For completion."""
-    flags = 0
-
     g = self.var_stack[0]  # global scope
     for lhs, value in pairs:
       #log('SETTING %s -> %s', lhs, value)
       assert value.tag in (value_e.Str, value_e.StrArray)
 
       # Assuming LeftVar for now.
-      g[lhs.name] = flags, value
+      g[lhs.name] = runtime.cell(value, False, False)
 
-  def SetLocal(self, pairs):
-    # TODO: respect flags
+  def SetLocals(self, pairs):
     # TRACE: hm maybe.  It's for debugging, but seems exotic.
 
     # types: indexed, associative, integer?  Not sure if any of these are
@@ -211,11 +207,15 @@ class Mem(object):
     # This helps with stuff like IFS.  It starts off as a string, and assigning
     # it to a list is en error.  I guess you will have to turn this no for
     # bash?
-    flags = 0
     for lhs, value in pairs:
       assert value.tag in (value_e.Str, value_e.StrArray)
       # Assuming LeftVar for now.
-      self.top[lhs.name] = flags, value
+      self.top[lhs.name] = runtime.cell(value, False, False)
+
+  def SetLocal(self, name, val):
+    """Set a single local.""" 
+    pairs = [(ast.LeftVar(name), val)]
+    self.SetLocals(pairs)
 
   def SetExportFlag(self, name):
     """
@@ -228,14 +228,14 @@ class Mem(object):
       scope = self.var_stack[i]
       if name in scope:
         # Don't need to use flags
-        _, value = scope[name]
-        scope[name] = 1, value
+        cell = scope[name]
+        cell.exported = True
         found = True
         break
 
     if not found:
       # You can export an undefined variable!
-      scope[name] = 1, runtime.Undef()
+      scope[name] = runtime.cell(runtime.Undef(), False, False)
 
   def GetExported(self):
     # TODO: Instead of searching every local and global variable on every
@@ -248,10 +248,6 @@ class Mem(object):
     pass
     #
     #self.export_stack = []
-
-  def SetSimpleVar(self, name, value):
-    """Set a simple variable (not an array)."""
-    self.top[name] = 0, value
 
   # Are special vars here?  # like $? and $0 ?
   # IFS, PWD, etc.
@@ -385,8 +381,7 @@ class Executor(object):
       return 1
     # TODO: split line and do that logic
     val = runtime.Str(line.strip())
-    pairs = [(ast.LeftVar(names[0]), val)]
-    self.mem.SetLocal(pairs)  # read always uses local variables?
+    self.mem.SetLocal(names[0], val)
     return 0
 
   def _Echo(self, argv):
@@ -789,7 +784,7 @@ class Executor(object):
 
       # Set each var so the next one can reference it.  Example:
       # FOO=1 BAR=$FOO ls /
-      self.mem.SetSimpleVar(name, val)
+      self.mem.SetLocal(name, val)
       # TODO: Need to pop bindings for simple commands.  Need a stack.
 
       result[name] = val.s
@@ -918,9 +913,9 @@ class Executor(object):
         pairs.append((pair.lhs, val))
 
       if node.keyword == Id.Assign_Local:
-        self.mem.SetLocal(pairs)
+        self.mem.SetLocals(pairs)
       else:  # could be readonly/export/etc.
-        self.mem.SetGlobal(pairs)
+        self.mem.SetGlobals(pairs)
 
       # TODO: This should be eval of RHS, unlike bash!
       status = 0
@@ -995,7 +990,7 @@ class Executor(object):
         # object.
       status = 0  # in case we don't loop
       for x in iter_list:
-        self.mem.SetSimpleVar(iter_name, runtime.Str(x))
+        self.mem.SetLocal(iter_name, runtime.Str(x))
 
         try:
           status = self._Execute(node.body)  # last one wins

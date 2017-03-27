@@ -209,13 +209,13 @@ class ShellFuncAction(CompletionAction):
     self.ex.RunFunc(self.func, [])  # call with no arguments
 
     # Should be COMP_REPLY to follow naming convention!  Lame.
-    defined, val = self.ex.mem.GetGlobal('COMPREPLY')
-    if not defined:
+    val = self.ex.mem.GetGlobal('COMPREPLY')
+    if val.tag == value_e.Undef:
       print('COMP_REPLY not defined', file=sys.stderr)
       return
 
     if val.tag != value_e.StrArray:
-      print('ERROR: COMP_REPLY should be an array, got %s', file=sys.stderr)
+      print('ERROR: COMP_REPLY should be an array, got %s' % val, file=sys.stderr)
       return
     reply = val.strs
 
