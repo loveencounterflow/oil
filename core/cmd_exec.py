@@ -125,8 +125,15 @@ class Mem(object):
     self.argv_stack.append(argv)
 
   def Pop(self):
-    self.var_stack.pop()
+    self.top = self.var_stack.pop()
     self.argv_stack.pop()
+
+  def PushTemp(self):
+    self.top = {}
+    self.var_stack.append(self.top)
+
+  def PopTemp(self):
+    self.top = self.var_stack.pop()
 
   def GetArgv0(self):
     """For $0."""
@@ -658,7 +665,6 @@ class Executor(object):
       if argv is None:
         err = self.ev.Error()
         raise AssertionError("Error evaluating words: %s" % err)
-      # TODO: Gather exported variables from self.mem
       more_env = self.mem.GetExported()
       self._EvalEnv(node.more_env, more_env)
       if more_env is None:
@@ -759,6 +765,9 @@ class Executor(object):
       more_env: list of ast.env_pair
       out_env: mutated.
     """
+    # NOTE: Env evaluation is done in new scope so it doesn't persist.  It also
+    # pushes argv.  Don't need that?
+    #self.mem.PushTemp()  
     for env_pair in node_env:
       name = env_pair.name
       rhs = env_pair.val
@@ -769,14 +778,11 @@ class Executor(object):
 
       # Set each var so the next one can reference it.  Example:
       # FOO=1 BAR=$FOO ls /
-      # NOTE: This needs a new scope so it doesn't persist.  TODO: This also
-      # pushes argv.  Don't need that?
-      self.mem.PushFrame()  
       self.mem.SetLocal(name, val)
-      self.mem.Pop()
       # TODO: Need to pop bindings for simple commands.  Need a stack.
 
       out_env[name] = val.s
+    #self.mem.PopTemp()
 
   def _RunPipeline(self, node):
     # TODO: Also check for "echo" and "read".  Turn them into HereDocRedirect()
@@ -822,7 +828,6 @@ class Executor(object):
       if argv is None:
         self.error_stack.extend(self.ev.Error())
         raise _FatalError()
-      # TODO: Gather exported variables from self.mem
       more_env = self.mem.GetExported()
       self._EvalEnv(node.more_env, more_env)
       if more_env is None:
