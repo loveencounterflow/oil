@@ -217,7 +217,7 @@ test-builtin() {
 }
 
 builtins() {
-  sh-spec tests/builtins.test.sh --osh-failures-allowed 6 \
+  sh-spec tests/builtins.test.sh --osh-failures-allowed 3 \
     ${REF_SHELLS[@]} $OSH "$@"
 }
 
@@ -235,7 +235,8 @@ func-parsing() {
 }
 
 func() {
-  sh-spec tests/func.test.sh ${REF_SHELLS[@]} $OSH "$@"
+  sh-spec tests/func.test.sh --osh-failures-allowed 1 \
+    ${REF_SHELLS[@]} $OSH "$@"
 }
 
 glob() {

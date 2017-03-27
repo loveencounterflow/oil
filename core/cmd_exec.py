@@ -180,37 +180,33 @@ class Mem(object):
 
     return runtime.Undef()
 
+  def _SetInScope(self, scope, pairs):
+    for lhs, val in pairs:
+      #log('SETTING %s -> %s', lhs, value)
+      assert val.tag in (value_e.Str, value_e.StrArray)
+
+      name = lhs.name
+      if name in scope:
+        # Preserve cell flags.  For example, could be Undef and exported!
+        scope[name].val = val
+      else:
+        scope[name] = runtime.cell(val, False, False)
+
   def SetGlobals(self, pairs):
     """For completion."""
-    g = self.var_stack[0]  # global scope
-    for lhs, value in pairs:
-      #log('SETTING %s -> %s', lhs, value)
-      assert value.tag in (value_e.Str, value_e.StrArray)
-
-      # TODO: Could be Undef and exported!  Need to mutate the cell.
-      g[lhs.name] = runtime.cell(value, False, False)
+    self._SetInScope(self.var_stack[0], pairs)
 
   def SetLocals(self, pairs):
-    # TRACE: hm maybe.  It's for debugging, but seems exotic.
-
-    # types: indexed, associative, integer?  Not sure if any of these are
-    # valuable.  Integer could be useful for type checking, but this is a
-    # DYNAMIC flag.
-
-    # - If the value is readonly, don't set it.
-    # - If the value is marked 'export', call setenv()
-
     # - Never change types?  yeah I think that's a good idea, at least for oil
     # (not sh, for compatibility).  set -o strict-types or something.  That
     # means arrays have to be initialized with let arr = [], which is fine.
-
     # This helps with stuff like IFS.  It starts off as a string, and assigning
     # it to a list is en error.  I guess you will have to turn this no for
     # bash?
-    for lhs, value in pairs:
-      assert value.tag in (value_e.Str, value_e.StrArray)
-      # TODO: Could be Undef and exported!  Need to mutate the cell.
-      self.top[lhs.name] = runtime.cell(value, False, False)
+
+    # TODO: Shells have dynamic scope for setting variables.  This is really
+    # bad.
+    self._SetInScope(self.top, pairs)
 
   def SetLocal(self, name, val):
     """Set a single local.""" 
@@ -227,7 +223,6 @@ class Mem(object):
     for i in range(len(self.var_stack) - 1, -1, -1):
       scope = self.var_stack[i]
       if name in scope:
-        # Don't need to use flags
         cell = scope[name]
         cell.exported = True
         found = True
@@ -235,7 +230,7 @@ class Mem(object):
 
     if not found:
       # You can export an undefined variable!
-      scope[name] = runtime.cell(runtime.Undef(), False, False)
+      scope[name] = runtime.cell(runtime.Undef(), True, False)
 
   def GetExported(self):
     exported = {}
