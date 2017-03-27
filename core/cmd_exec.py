@@ -187,7 +187,7 @@ class Mem(object):
       #log('SETTING %s -> %s', lhs, value)
       assert value.tag in (value_e.Str, value_e.StrArray)
 
-      # Assuming LeftVar for now.
+      # TODO: Could be Undef and exported!  Need to mutate the cell.
       g[lhs.name] = runtime.cell(value, False, False)
 
   def SetLocals(self, pairs):
@@ -209,7 +209,7 @@ class Mem(object):
     # bash?
     for lhs, value in pairs:
       assert value.tag in (value_e.Str, value_e.StrArray)
-      # Assuming LeftVar for now.
+      # TODO: Could be Undef and exported!  Need to mutate the cell.
       self.top[lhs.name] = runtime.cell(value, False, False)
 
   def SetLocal(self, name, val):
@@ -238,19 +238,14 @@ class Mem(object):
       scope[name] = runtime.cell(runtime.Undef(), False, False)
 
   def GetExported(self):
-    # TODO: Instead of searching every local and global variable on every
-    # invocation, I think it makes sense to maintain a stack of lists/sets.
-    #
-    # - export: add to the set.  but you have to know if it's local or global
-    #
-    # SetExportFlag should check if the name is resolved locally.  If not, then
-    # resolve it globally.
-    pass
-    #
-    #self.export_stack = []
-
-  # Are special vars here?  # like $? and $0 ?
-  # IFS, PWD, etc.
+    exported = {}
+    # Search from globals up.  Names higher on the stack will overwrite names
+    # lower on the stack.
+    for scope in self.var_stack:
+      for name, cell in scope.items():
+        if cell.exported and cell.val.tag == value_e.Str:
+          exported[name] = cell.val.s
+    return exported
 
   def GetTraceback(self, token):
     # TODO: When you Push(), add a function pointer.  And then walk
@@ -669,7 +664,8 @@ class Executor(object):
         err = self.ev.Error()
         raise AssertionError("Error evaluating words: %s" % err)
       # TODO: Gather exported variables from self.mem
-      more_env = self._EvalEnv(node.more_env)
+      more_env = self.mem.GetExported()
+      self._EvalEnv(node.more_env, more_env)
       if more_env is None:
         # TODO: proper error
         raise AssertionError()
@@ -761,20 +757,14 @@ class Executor(object):
         raise AssertionError
     return redirects
 
-  def _EvalEnv(self, more_env):
+  def _EvalEnv(self, node_env, out_env):
     """Evaluate environment variable bindings.
 
     Args:
       more_env: list of ast.env_pair
-
-    Returns:
-      A dictionary of strings to strings
-
-    Side effect: sets local variables so bindings can reference each other.
-      Hm.  Is this wrong?
+      out_env: mutated.
     """
-    result = {}
-    for env_pair in more_env:
+    for env_pair in node_env:
       name = env_pair.name
       rhs = env_pair.val
 
@@ -784,11 +774,14 @@ class Executor(object):
 
       # Set each var so the next one can reference it.  Example:
       # FOO=1 BAR=$FOO ls /
+      # NOTE: This needs a new scope so it doesn't persist.  TODO: This also
+      # pushes argv.  Don't need that?
+      self.mem.PushFrame()  
       self.mem.SetLocal(name, val)
+      self.mem.Pop()
       # TODO: Need to pop bindings for simple commands.  Need a stack.
 
-      result[name] = val.s
-    return result
+      out_env[name] = val.s
 
   def _RunPipeline(self, node):
     # TODO: Also check for "echo" and "read".  Turn them into HereDocRedirect()
@@ -835,7 +828,8 @@ class Executor(object):
         self.error_stack.extend(self.ev.Error())
         raise _FatalError()
       # TODO: Gather exported variables from self.mem
-      more_env = self._EvalEnv(node.more_env)
+      more_env = self.mem.GetExported()
+      self._EvalEnv(node.more_env, more_env)
       if more_env is None:
         print(self.error_stack)
         # TODO: throw exception
